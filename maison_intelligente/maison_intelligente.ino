@@ -1,6 +1,7 @@
 #include <AccelStepper.h>
 #include <HCSR04.h>
 #include <LCD_I2C.h>
+#include <U8g2lib.h>
 
 #define MOTOR_INTERFACE_TYPE 4
 #define IN_1 9
@@ -9,15 +10,20 @@
 #define IN_4 12
 #define TRIGGER_PIN 7
 #define ECHO_PIN 6
+#define CLK_PIN 30
+#define DIN_PIN 34
+#define CS_PIN 32
 
 AccelStepper myStepper(MOTOR_INTERFACE_TYPE, IN_1, IN_3, IN_2, IN_4);
 HCSR04 hc(TRIGGER_PIN, ECHO_PIN);
 LCD_I2C lcd(0x27, 16, 2);
 
+U8G2_MAX7219_8X8_F_4W_SW_SPI u8g2(U8G2_R0, CLK_PIN, DIN_PIN, CS_PIN, U8X8_PIN_NONE, U8X8_PIN_NONE);
+
 String numeroEtudiant = "2410307";
 String labo = "LABO 4B";
-const int stepDeg = 10;
-const int MAX_ANGLE = 170;
+int MIN_ANGLE = 10;
+int MAX_ANGLE = 170;
 int targetAngle = 0;
 const int MIN_DISTANCE = 30;
 const int MAX_DISTANCE = 60;
@@ -37,11 +43,12 @@ int ledInterval = 100;
 unsigned long lastUpdateTime = 0;
 const long UPDATE_INTERVAL = 100;
 int min = 0;
-int delai = 200;
+int delai = 2000;
 int serial = 9600;
+int time=3000;
 
-const int alarmDistance = 15;
-const unsigned long alarmEndTime = 3000;
+int alarmDistance = 15;
+const unsigned long alarmEndTime = time;
 
 float distance = 0;
 bool alarmActive = false;
@@ -65,12 +72,12 @@ void setup() {
   pinMode(redled, OUTPUT);
   pinMode(blueled, OUTPUT);
 
-
   myStepper.setMaxSpeed(maxSpeed);
   myStepper.setAcceleration(acceleration);
 
-
-  demarrage();
+  u8g2.begin();
+  u8g2.setFont(u8g2_font_4x6_tr);
+  u8g2.setContrast(5);
 }
 
 void demarrage() {
@@ -98,7 +105,7 @@ void moteur() {
   int maxDegree = 360;
   if (etat == AUTOMATIQUE) {
     int targetSteps = map(targetAngle, min, MAX_ANGLE, min, (maxMoveTo * MAX_ANGLE) / maxDegree);
-    if ((myStepper.currentPosition() - targetSteps > stepDeg) || (targetSteps - myStepper.currentPosition() > stepDeg)) {
+    if ((myStepper.currentPosition() - targetSteps > MIN_ANGLE) || (targetSteps - myStepper.currentPosition() > MIN_ANGLE)) {
       myStepper.moveTo(targetSteps);
     }
   } else {
@@ -118,7 +125,7 @@ void etatSystem() {
     myStepper.stop();
   } else {
     etat = AUTOMATIQUE;
-    targetAngle = map(distance, MIN_DISTANCE, MAX_DISTANCE, stepDeg, MAX_ANGLE);
+    targetAngle = map(distance, MIN_DISTANCE, MAX_DISTANCE, MIN_ANGLE, MAX_ANGLE);
   }
 }
 
@@ -146,15 +153,6 @@ void machineEtat() {
   }
 }
 
-void valeurSerie() {
-
-  Serial.print("etd:");
-  Serial.print(numeroEtudiant);
-  Serial.print(",dist:");
-  Serial.print(distance);
-  Serial.print(",deg:");
-  Serial.println(targetAngle);
-}
 
 void activateAlarm() {
   currentTime = millis();
@@ -204,16 +202,93 @@ void alarmState() {
   }
 }
 
+void commandGestion() {
+
+  if (!Serial.available()) return;
+  String command = Serial.readStringUntil('\n');
+  command.trim();
+  command.toLowerCase();
+
+  if (command == "g_dist") {
+    Serial.print("Arduino: ");
+    Serial.println(distance);
+    confirm();
+
+  } else if (command.startsWith("cfg;alm;")) {
+    int valeur = command.substring(8).toInt();
+    alarmDistance = valeur;
+
+    Serial.print("Il configure la distance de détection de l'alarme à ");
+      Serial.print(valeur);
+    Serial.println("cm");
+    confirm();
+  } else if (command.startsWith("cfg;lim_inf;")) {
+    int value = command.substring(12).toInt();
+
+    if (value < MAX_ANGLE) {
+      MIN_ANGLE = value;
+      Serial.print("Il configure la limite inférieur du moteur à ");
+        Serial.print(value);
+      Serial.println("cm");
+      confirm();
+    } else {
+      Serial.println("Erreur – Limite inférieure plus grande que limite supérieure");
+      error();
+    }
+  } else if (command.startsWith("cfg;lim_sup;")) {
+    int val = command.substring(12).toInt();
+
+    if (val > MIN_ANGLE) {
+      MAX_ANGLE = val;
+      Serial.print("Il configure la limite supérieur du moteur à ");
+      Serial.print(val);
+      Serial.println("cm");
+      confirm();
+    } else error();
+  } else {
+    inconnu();
+  }
+}
+
+void confirm() {
+  unsigned long screenDelay = millis();
+  while (millis() - screenDelay < time) {
+    u8g2.clearBuffer();
+    u8g2.drawLine(1, 5, 3, 7);
+    u8g2.drawLine(3, 7, 7, 1);
+    u8g2.sendBuffer();
+  }
+  u8g2.clear();
+}
+
+void error() {
+  unsigned long screenDelay = millis();
+  while (millis() - screenDelay < time) {
+    u8g2.clearBuffer();
+    u8g2.drawCircle(3, 3, 3);
+    u8g2.drawLine(0, 0, 7, 7);
+    u8g2.sendBuffer();
+  }
+  u8g2.clear();
+}
+
+void inconnu() {
+  unsigned long screenDelay = millis();
+  while (millis() - screenDelay < time) {
+    u8g2.clearBuffer();
+    u8g2.drawLine(7, 7, 0, 0);
+    u8g2.drawLine(0, 7, 7, 0);
+    u8g2.sendBuffer();
+  }
+  u8g2.clear();
+}
+
 void loop() {
   unsigned long currentTime = millis();
   distance = calculeDistance();
   etatSystem();
   machineEtat();
-  if (currentTime - lastUpdateTime >= UPDATE_INTERVAL) {
-    lastUpdateTime = currentTime;
-    valeurSerie();
-  }
-
+  commandGestion();
   moteur();
   myStepper.run();
 
