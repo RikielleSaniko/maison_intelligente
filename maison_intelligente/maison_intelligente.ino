@@ -45,7 +45,7 @@ const long UPDATE_INTERVAL = 100;
 int min = 0;
 int delai = 2000;
 int serial = 9600;
-int time=3000;
+int time = 3000;
 
 int alarmDistance = 15;
 const unsigned long alarmEndTime = time;
@@ -154,54 +154,6 @@ void machineEtat() {
 }
 
 
-void activateAlarm() {
-  currentTime = millis();
-  static unsigned long previousledMillis = 0;
-  digitalWrite(buzzer, !buzzerState);
-
-  if (currentTime - previousledMillis >= ledInterval) {
-
-    previousledMillis = currentTime;
-
-    if (ledState) {
-      digitalWrite(redled, !etatled);
-      digitalWrite(blueled, etatled);
-    } else {
-      digitalWrite(redled, etatled);
-      digitalWrite(blueled, !etatled);
-    }
-    ledState = !ledState;
-  }
-}
-
-void deactivateAlarm() {
-  digitalWrite(buzzer, buzzerState);
-
-  digitalWrite(redled, etatled);
-  digitalWrite(blueled, etatled);
-}
-
-void alarmState() {
-  if (distance <= alarmDistance && distance > min) {
-
-    if (!alarmActive) {
-      alarmActive = true;
-    }
-    lastAlarmTime = millis();
-
-  } else {
-
-    if (alarmActive && (millis() - lastAlarmTime >= alarmEndTime)) {
-      alarmActive = false;
-      deactivateAlarm();
-    }
-  }
-
-  if (alarmActive) {
-    activateAlarm();
-  }
-}
-
 void commandGestion() {
 
   if (!Serial.available()) return;
@@ -219,7 +171,7 @@ void commandGestion() {
     alarmDistance = valeur;
 
     Serial.print("Il configure la distance de détection de l'alarme à ");
-      Serial.print(valeur);
+    Serial.print(valeur);
     Serial.println("cm");
     confirm();
   } else if (command.startsWith("cfg;lim_inf;")) {
@@ -228,7 +180,7 @@ void commandGestion() {
     if (value < MAX_ANGLE) {
       MIN_ANGLE = value;
       Serial.print("Il configure la limite inférieur du moteur à ");
-        Serial.print(value);
+      Serial.print(value);
       Serial.println("cm");
       confirm();
     } else {
